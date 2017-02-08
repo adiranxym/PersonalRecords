@@ -1,0 +1,227 @@
+******************************** --/Linux系统相关记录 /-- *****************************
+1. 修改IP地址
+	ifconfig或者ip addr找到形如ens333这个玩意的东西
+	修改/etc/sysconfig/network-scripts/ifcfg-ens33
+	BOOTPROTO="static"
+	IPADDR=固定ip
+	NETMASK=255.255.255.0
+	GATEWAY=网关
+	DNS1=.....
+	DNS2=.....
+	ONBOOT=yes
+	修改完后service network restart 
+	就可以ping通外网，和使用putty
+
+2. yum install kernel 更新内核 
+
+3. 原来一直报centos7的防火墙firewall运行不成功，用systemctl status firewalld看都是failed,后来更新了内核也不行,再后来把/usr/sbin/firewalld改成python2就可以了，原因可能是升级了python3,又可以
+用systemctl start firewalld启动，原来改vim $(which firewall-cmd)这个不行，要改vim $(which firewalld),但是，后来在运行firewall-cmd --per按两次[tab]补充命令后，也不行，还是要改vim $(which firewall-cmd)成python2
+
+4. 安装MyEclipse 2015并破解
+	安装好stable 2.0版本后，用注册机破解，windows下执行的是.bat文件，Linux下执行java -jar cracker2015.jar,然后按照说明破解即可
+	安装完成后在桌面创建myeclipse的快捷方式
+	touch /usr/share/application/myeclipse.desktop
+	然后输入
+[Desktop Entry]
+Encoding=UTF-8
+Name=myeclipse
+Comment=MyEclipse IDE
+Exec=/home/MyEclipse\ 2015/myeclipse
+Icon=/home/MyEclipse 2015/icon.xpm
+Terminal=false
+StartupNotify=true
+Type=Application
+Categories=Application;Development;
+	在图形界面进入/usr/share/application,属性修改图标，然后复制到桌面
+
+5. LVM 管理
+	(扩容，VG还有未分配的PE，不需要加硬盘）
+	相关命令pvdisplay物理巻 ,vgdisplay 巻组，lvdisplay逻辑巻组
+	因为在vg巻组层面Free PE 还有剩余，因此可以直接在lv逻辑巻组进行扩展
+	lvs查看逻辑巻组情况
+	df -lh查看详细分区情况
+	lvextend -L +5G /dev/cl/root #给cl巻组下root逻辑巻增加5G
+	此时df -lh查看，还没有变化 ，但是lvs查看，/root的大小已经改变
+	因为是xfs文件系统,所以要用
+	xfs_growfs /dev/cl/root #给此分区进行调整生效
+	其他ext3,ext4等文件系统的调整要执行其他命令
+	
+******************************** --/命令记录 /-- **************************************
+locale 语系
+echo ${PATH} 显示环境变量
+env 显示环境变量及一些变量设定 其中PS1可以设定提示符[xymok@localhost 15:33 ~]$
+unlimit -a 程序限制
+source 或者小数点.		可以将修改的设定直接读取到shell中而不用重新登入
+
+符號	意義
+*	代表『 0 個到無窮多個』任意字元
+?	代表『一定有一個』任意字元
+[ ]	同樣代表『一定有一個在括號內』的字元(非任意字元)。例如 [abcd] 代表『一定有一個字元， 可能是 a, b, c, d 這四個任何一個』
+[ - ]	若有減號在中括號內時，代表『在編碼順序內的所有字元』。例如 [0-9] 代表 0 到 9 之間的所有數字，因為數字的語系編碼是連續的！
+[^ ]	若中括號內的第一個字元為指數符號 (^) ，那表示『反向選擇』，例如 [^abc] 代表 一定有一個字元，只要是非 a, b, c 的其他字元就接受的意思
+#	註解符號：這個最常被使用在 script 當中，視為說明！在後的資料均不執行
+\	跳脫符號：將『特殊字元或萬用字元』還原成一般字元
+|	管線 (pipe)：分隔兩個管線命令的界定(後兩節介紹)；
+;	連續指令下達分隔符號：連續性命令的界定 (注意！與管線命令並不相同)
+~	使用者的家目錄
+$	取用變數前置字元：亦即是變數之前需要加的變數取代值
+&	工作控制 (job control)：將指令變成背景下工作
+!	邏輯運算意義上的『非』 not 的意思！
+/	目錄符號：路徑分隔的符號
+>, >>	資料流重導向：輸出導向，分別是『取代』與『累加』
+<, <<	資料流重導向：輸入導向 (這兩個留待下節介紹)
+' '	單引號，不具有變數置換的功能 ($ 變為純文字)
+" "	具有變數置換的功能！ ($ 可保留相關功能)
+` `	兩個『 ` 』中間為可以先執行的指令，亦可使用 $( )
+( )	在中間為子 shell 的起始與結束
+{ }	在中間為命令區塊的組合！
+******************************** --/快捷键 /-- **************************************
+ctrl+u  =Backspace
+ctrl+k  =Delete
+ctrl+a  =移到命令行最前面
+ctrl+e  =移到命令行最后面
+
+組合按鍵	執行結果
+Ctrl + C	終止目前的命令
+Ctrl + D	輸入結束 (EOF)，例如郵件結束的時候；
+Ctrl + M	就是 Enter 啦！
+Ctrl + S	暫停螢幕的輸出
+Ctrl + Q	恢復螢幕的輸出
+Ctrl + U	在提示字元下，將整列命令刪除
+Ctrl + Z	『暫停』目前的命令
+
+******************************** --/文件说明 /-- **************************************
+/etc/systemd/system/		管理員依據主機系統的需求所建立的執行腳本
+/etc/sysconfig/*		幾乎所有的服務都會將初始化的一些選項設定寫入到這個目錄下
+/etc/man_db.conf		man资料去哪里找
+/etc/issue			登陆TTY的欢迎界面的显示  /etc/issue.net当用telnet远程连接过来的时候显示的
+/etc/motd			您想要讓使用者登入後取得一些訊息，例如您想要讓大家都知道的訊息
+/etc/profile			login shell一定会读取的文件，是系统的整体设定，它会呼叫其他资料如
+				/etc/profile.d/*.sh
+				其實這是個目錄內的眾多檔案！只要在 /etc/profile.d/ 這個目錄內且副檔名為 .sh ，另外，使用者能夠具有 r 的權限				， 那麼該檔案就會被 /etc/profile 呼叫進來。
+				/etc/locale.conf
+				這個檔案是由 /etc/profile.d/lang.sh 呼叫進來的！這也是我們決定 bash 預設使用何種語系的重要設定檔！ 檔案裡最				重要的就是 LANG/LC_ALL 這些個變數的設定啦！
+/etc/securetty			会影响到root可登陆的安全终端
+/etc/nologin			会影响到一般用户是否能够登陆
+/etc/security/limits.conf	PAM来管理的~/.bashrc的设定
+
+/usr/lib/systemd/system/	使用 CentOS 官方提供的軟體安裝後，預設的啟動腳本設定檔都放在這裡，這裡的資料盡量不要修改～ 要修改時，請到 				/etc/systemd/system 底下修改較佳！
+
+/run/				放置了很多daemon暂存文件
+/run/systemd/system/		系統執行過程中所產生的服務腳本，這些腳本的優先序要比 /usr/lib/systemd/system/ 高！
+
+~/.bash_profile			这三个文件是login shell顺序读取的个人设定
+~/.bash_login			这三个文件是login shell顺序读取的个人设定
+~/.profile			这三个文件是login shell顺序读取的个人设定
+~/.bash_history			歷史命令就記錄
+~/.bash_logout			登出后系統再做什么动作
+
+******************************** --/Vmware及其他相关问题记录 /-- **************************************
+1.ssh重装
+ yum remove openssh
+
+ yum install openssh openssh-server openssh-clients
+
+ systemctl start sshd.service
+ systemctl status sshd.service
+
+2.VMWare 设置共享文件夹不出现/mnt/hgfs/
+  重装VMware Tool 在虚拟机安装目录下的linux.iso加载到虚拟机的cdrom启动，进入linux后
+	mount /dev/cdrom /mnt/cdrom
+	cp *****.gz ~/tmp
+	tar -zxvf ******.gz
+	进入解压目录后进行vmware tool 的安装。
+
+3. 挂载NTFS的U盘要加ntfs-3g yum安装
+
+4. cp -r 拷贝目录文件
+
+5. 将vmware12安装在服务器上，使用桥接模式，centos配置成同一网段的ip后可以上网，putty可以连接
+
+6. vim8.0安装 
+	rmp -qa | grep vim 卸载vim7.4
+	下载vim8.0.tar.bz2
+	解压后
+	./config  --with-features=huge --enable-multibyte --enable-python3interp --with-python3-config-dir=/usr/local/lib/python3.6/config-3.6m-x86_64-linux-gnu --prefix=/usr
+	让vim支持python3 --enable-python3interp
+	--with-python3-config-dir=python3.6的目录
+	--prefix=/usr安装路径
+	--with-features=huge最大安装
+	--enable-multibyte 多语言支持
+	make
+	make install安装完成后 
+	vim --version看到+python3
+	安装到 /usr/share
+	到vim 里命令模式 :echo has('python3') 输出1成功
+
+7. vim 安装 vundle
+	 git clone https://github.com/gmarik/vundle.git ~/.vim/bundle/vundle有篇文章说是到~/.vim/bundle/vundle.vim 导致:BundleInstall 命令都是出错的
+
+8. VNC 与 X window System
+	rpm -qa | grep xl1
+	rpm -qa | grep gnome
+9. VNC SERVER相关
+	装好vnc 后，用vnc viwer连接上去不好看，分辨率不行，进行设置
+	vncserver -list列出所有已经产生的vnc连接
+	vncserver -kill :1 也可以所有的都删除
+	vncserver -geometry 1440x900 设置好后就会产生一条 ：1
+	这时再连就可以生效了
+	
+******************************** --/Git相关问题记录 /-- **************************************
+1.创建ssh key
+	ssh-keygen -t rsa -C "261792225@qq.com" 就可以在~目录下找到.ssh文件夹，再复制里面的id_rsa.pub到github的ssh key 中
+2. 关联到远程repository
+	git remote add origin git@github.com:adiranxym/xymokcentos.git
+	删除这个关联
+	git remote rm origin
+	再次关联
+	git push -u origin master 初次提交
+	git push origin master	
+
+******************************** --/Python问题 /-- **************************************
+
+
+******************************** --/Mysql问题 /-- **************************************
+2. Mysql 卸载
+	yum remove mysql mysql-client mysql-server mysql-libs
+	rpm -qa| grep mysql
+	若有，都卸载掉
+	再把mysql 的data文件夹都删除了，/var/lib/mysql，这个路径是datadir,在my.cnf里面有
+	再重装
+
+3. Mysql 用户的操作
+	按照顺序会读取三张表 user,db,host，如果在第一张表找不到相应的权限会在第二张表,
+	grant select,insert,create,drop on 数据库.* to '用户'@'localhost' [identifiedby 'XXX'] 是修改db，所以在user表中的相关权限是N,而在db表中是Y
+	
+	删除用户
+	drop user 用户名@localhost;
+	delete from user where user='' and host=''
+
+4. Mysql 字符集 show variables like '%char%',看看是不是都是utf8,如果不是要修改/etc/my.cnf
+	vim /etc/my.cnf
+	在最上面[mysqld]上面加上
+	[client]
+	default-character-set=utf8
+	在[mysqld]里面，最下面写
+	#--------------------UTF8-----------------------------#
+	default-storage-engine=INNODB
+	character-set-server=utf8
+	collation-server=utf8_general_ci
+
+	再查看show variables like '%collation%';
+	show variables like '%char%';
+	碰到都是utf8，但是insert不进中文的时候，可能是表的collation不是utf8
+	show full columns from XXX
+	这是因为建表之前还未修改数据库字符集
+	
+	alter database XXX characterset utf8; 修改某一数据库的字符集
+
+
+5. Mysql into outfile
+	grant file on *.* to 用户＠localhost file是全局，不能单grant到一个数据库上
+	如果报secure_file_priv ,要修改/etc/my.cnf [mysqld]加上secure_file_priv= 
+	再重启systemctl restart mysqld
+	只可以导出到'/tmp'目录，因为SELinux的原因，要不就关闭SELinux,
+		vim /etc/selinux/config 
+		SELINUX=enforcing  改SELINUX=disabled
+	要不就从 '/tmp'复制过来
