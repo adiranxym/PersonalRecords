@@ -1,0 +1,551 @@
+--------------------------***********************************Oracle 命令操作***********************---------------------------------------
+1. 
+tnsping 网络服务名		(net configuration assistant)配置好的服务名来检查客户端是否连接得上远程数据库。
+set timing off/on 		显示sql语句执行时间
+SET SERVEROUTPUT ON/OFF		可以输出DBMS_OUTPUT.PUT_LINE(k); 的内容，要不屏幕无输出
+COLUMN 列名 FORMAT A40		在sqlplus 界面查询时，将该列格式控制在40个字符
+EXECUTE 存储过程('','');	执行存储过程
+SPOOL 路径+文件名;		将结果输出到文件中
+执行一系列查询操作
+SPOOL OFF;	
+select * from 表 where 列名=&d;	就会根据输入的值来进行查询
+
+ 
+
+--------------------------***********************************Oracle 系统相关***********************---------------------------------------
+1.Oracle启动
+	1>启动实例 start an isntance(NOMOUNT 状态)
+		读取pfile (Initialization Parameter File),spfile (Server Parameter File) 这两者合称为参数文件，指定控制文件的位置
+		*pfile 
+			文本文件，DBA不能永久修改初始化参数，要关闭数据库，修改pfile，再用pfile重启数据库
+			startup pfile='路径+pfile文件名.ora' 来用pfile启动数据库
+
+		*spfile %ORACLE_HOME%/database/SPFILE实例名.ora   oracle默认使用spfile启动数据库
+
+			二进制文件,通过oracle命令修改 DBA可以在数据库运行时动态修改spfile的参数,推荐使用spfile
+			alter system set ... scope=spfile		更新初始化参数文件 scope=memory对当前实例有效，scope=session本次会话有效			
+		
+		*oracle一次只使用一个参数文件来启动实例
+			用spfile创建pfile命令，create pfile='%ORACLE_HOME%'\database\INIT实例名.ORA' from spfile='%ORACLE_HOME%'\database\SPFILE实例名.ORA'，反过来是创建spfile，两者要有一个存在
+					
+		*相关命令
+			show parameter [指定的参数]/select name,value from v$parameter;		显示初始化参数
+			
+		分配内存　System Global Area SGA,
+		启动一系列后台进程，内存和进程合起来组成Oracle Instance SID
+		一台机器上可以有多个实例，实例是用来驱动数据库。
+		
+		实例启动完成后，数据库就处于nomount状态，还没有与数据库进行关联，此阶段主要用于数据库维护（重建控制文件等）。
+		
+		startup nomount将数据库只启动到nomount状态,也就只启动了实例
+
+	2>装载数据库 mount the database(MOUNT 状态)
+		根据参数文件找到控制文件Control File,打开控制文件，从控制文件中找到数据文件Datafile和重做日志文件Redo file的名字和位置
+		
+		关联了实例和数据库，此阶段主要用于数据库的维护（如恢复数据库等）不能查数据库中用户自己的表，可以维护数据库		
+
+		startup nomount;
+		alter database mount;
+
+	3>打开数据库 open the database
+		找开找到的Datafiles 和 Redo Log File，此时可以访问数据库 
+
+		startup nomount;
+		alter database mount;
+		alter database open;
+
+	可以从 show parameter background_dump_dest 的alert日志文件中查看详细的启动日志,日志文件格式alert_实例名.log
+	
+2. 数据库的关闭
+	shutdown immeidate; 最常用，最安全,其他abort,normal,transactional不推荐
+		关闭数据库close the database->
+		  oracle首先把SGA中的数据写到Datafile和Redo file文件中，写完后oracle关闭datafiel 和Redofile,此时数据库不能访问，控制文件仍然打开
+		卸载数据库umount the database->
+		  oracle 将数据库与实例分离，即卸载数据库，此时实例仍然在内存中，控制文件被关闭。
+		关闭实例shut down the instance
+		  从内存中移出SGA并终止后台进程
+
+3. 表空间
+	表空间组：
+		从ORACLE 11g开始，引入表空间组，一个用户可以使用多个表空间。
+
+	一个数据库->n个表空间->n个表、索引、其他数据库对象--------数据库的逻辑结构 
+	表空间->n个数据文件（操作系统文件os block块）-------------物理结构
+
+	数据库的物理结构 主要：数据文件Datafiles,重做日志文件Online Redo Logs，控制文件Control Files
+		还有其他归档日志Archive Log Files,参数文件Parameter Files,警报Alert Files,跟踪Trace Files，备份Backup Files
+	数据库的逻辑结构 表空间Tablespace(表）->段Segment->区Extent->块Data Block
+	
+	1>块Data Block
+		oracle的最小存储单位
+
+	2>区Extent
+		区由块组成
+		由连续的块组成的一个逻辑存储单元
+
+		一般用本地管理Locally Managed Tablespaces
+		创建表空间的时候EXTENT MANAGEMENT LOCAL
+	3>段Segment
+		段由区组成，表由段组成   一个表对n个段
+		由一系列区组成的存储数据的逻辑存储单元
+			数据段Data Segment
+				用于存放数据（普通表的数据，分区表的一个分区，聚簇表），创建表的时候，其实质就是创建一个或多个段。
+			索引段Index Segment
+				存放索引数据，每个非分区索引有一个单独的索引段，实质一个或多个索引段。
+			临时段Temporary Segment
+				存放临时数据，是oracle自动创建和维护，用于数据排序，只有内存不足时才会用到临时段,DBA应该让排序在内存中进行
+				如果没有为用户指定临时表空间，oracle会默认使用system表空间作为用户的临时表空间，推荐使用非系统表空间作为临时表空间。
+			回滚段Rollback Segment		
+
+		手动管理
+		自动管理
+		创建表空间的时候SEGMENT SPACE MANAGEMENT AUTO
+	
+	扩展表空间
+		ALTER DATABASE DATAFILE '表空间数据文件路径' RESIZE 1000M 手动增加表空间中数据文件的大小
+		ALTER DATABASE DATAFILE '表空间数据文件' AUTOEXTEND ON NEXT 5M MAXSIZE UNLIMITED 自动扩展
+		ALTER TABLESPACE 表空间名 ADD DATAFILE '新的表空间数据文件2.ora' SIZE 1000M 往表空间中增加数据文件
+
+	删除表空间
+		要有DROP TABLESPACE权限 
+		DROP TABLESPACE 表空间名 INCLUDING CONTENTS [AND DATAFILES];
+
+	得到表空间的创建语句（用于重建表空间）
+	set long 10000;
+	select dbms_metadata.get_dll('TABLESPACE','表空间名') from dual;
+
+4. 数据文件
+	1>移动数据文件。在非归档模式下，不要轻易离线数据文件，可能不能重新在线，在线使数据文件中的数据可以访问。
+	在归档模式下ALTR DATABASE DATAFILE '数据文件' OFFLINE[ONLINE];
+	
+	查看数据文件与表空间的关系,select file_name,tablespace_name from dba_data_files;
+	使数据文件所属的表空间离线,alter tablespace 表空间名 offline normal;
+	移动数据文件
+	修改数据文件在控制文件中的信息,alter tablespace 表空间名 rename datafiel '原数据文件地址' to '新数据文件地址';
+	使表空间重新在线,alter tablespace 表空间名 online;
+	查询一下，检查。
+	当数据库的物理结构发生变化时，一定要备份数据库。
+	
+	2>删除数据文件
+	想要删除数据文件，数据文件必须为空
+	alter tablespace 表空间名 drop datafile '表空间数据文件';
+	alter tablespace 临时表空间名 drop tmepfile '临时表空间数据文件';或者 alter database tempfile '临时表空间数据文件' drop including datafiels;
+
+5. 临时表空间
+	临时数据：索引、临时表、临时索引、大对象LOB
+	临时表空间中包含排序段，在排序时会用到，一个排序段可以被多个排序操作共享，下面这些SQL会用到排序段
+			CREATE INDEX，ORDER BY,DISTINCT,GROUP BY,UNION,INTERSECT,MINUS
+	临时数据文件，当需要使用这些空间时，ORACLE才分配空间给临时数据文件，创建时不分配空间，信息存放在单独的数据字典 DBA_TEMP_FILES V$TEMPFILE
+	默认临时表空间，如果是本地管理LOCAL MANAGEMENT,就必须定义一个默认临时表空间，不应该把SYSTEM表空间作为临时表空间
+	由于从11g开始可以使用表空间组，可以在多个临时表空间并行。
+	
+6. 回滚表空间
+	show parameter undo_tablespace;				显示数据库当前正在使用的回滚表空间
+
+	DBA使用UNDO_MANAGEMENT=AUTO,自动管理回滚段。
+		
+	回滚表空间是一个特殊的表空间，只能用于存放回滚段，只能有一个活动的回滚表空间。每个数据库应该另外创建一个回滚表空间，非系统事务只能交由非系统回滚段来处理，SYSTEM回滚段用于回滚系统事务。
+
+	回滚数据：oracle会把修改前的数据的值保存起来，这样的数据叫回滚数据Undo Data，回滚数据一直被保存在回滚段中，直到：
+		输入rollback命令回滚这个事务,commit提交事务，会话被异常中止(事务被回滚),用户正常退出(事务被提交) 
+		
+		用途：
+		事务和回滚数据Transaction and Undo Data,
+		    要知道哪个回滚段被赋予哪个事务，可以查询数据字典V$TRANSACTION。
+
+		提供读一致性Read Consistency:
+		    当一个用户启动一个事务修改数据但未提交，另一个用户查询这此数据时，是从回滚段中查得这此数据。
+
+		数据库恢复Database Recovery,
+		    回滚数据是实例恢复(Instance Recovery)的重要组成部分，oracle应用重做日志文件中提交和未提交(从回滚段中取)来把数据库恢复到实例失败时的状态。
+
+		闪回查询Flashback Query	
+		    查询过去某个点，表的状态，允许DBA把表恢复到过去某个时间点。 
+	操作：
+		创建回滚表空间，启用回滚表空间自动管理，修改初始化参数文件，启动数据库来执行新的回滚表空间，删除回滚表空间，往回滚表空间中增加数据文件，切换回滚表空间。
+
+7. 自动存储管理 Automated Storage Management,ASM(Oracle 自动管理，DBA不用手工操作）
+	设置ASM需要配置好ASM实例，对未分配的硬盘进行分区，用asmtoolg工具来标记磁盘以便ASM可以识别这些磁盘，启动oracle css(集群同步服务),用DBCA创建ASM实例，用sqlplus来连接ASM as sysasm ,启动ASM。实质上是一个巻管理器，Oralce开发的用于替代操作系统所提供的逻辑巻管理器LVM。在生产环境最好对其性能测试。一般应该是没有启动的？
+
+	ASM实例
+	    类似Oracle数据库实例，也有自己的SGA和后台进程Backgroun Processes，任务是加载磁盘组(Disk Groups)，使ASM文件有效，Oracle Database Instance可以通过ASM文件访问磁盘组中的数据。
+
+	ASM磁盘组
+	    一个ASM磁盘组<-->一个ASM文件-->n个磁盘。
+	    一个文件所获得的空间要从磁盘组中进行划分。
+	    每个磁盘组都包含ASM元数据ASM Metdata
+	    磁盘组中可以存放：
+		控制文件Control Files
+		数据文件Datafiles，临时文件Temporary Datafiles，数据文件副本Datafile Copies
+		Spfile
+		重做日志文件Online Redo Logs，归档日志文件Archive Logs和闪回Flashback Logs
+		RMAN备份RMAN Backups
+		灾难恢复配置Disaster Recovery Configurations
+		Change Tracking Bitmaps(改变跟踪位图)
+
+	ASM元数据(ASM Metadata)
+	    驻留在磁盘组中(Disk Groups),Oracle使用元数据来管理磁盘组，元数据包括：
+		一个磁盘属于哪个磁盘组，磁盘组上的有效空间，一个磁盘组中有哪些文件，ASM区Extent的位置
+	ASM磁盘
+	    真正存放数据的地方，一个ASM磁盘可以是：
+		物理磁盘或者分区，逻辑巻LV，网络文件NFS
+
+	分配单元(Allocation Unit,AU)
+	    磁盘组中的磁盘会被分成多个单元，AU就磁盘组中的分配单位，指定了AU的大小(1M,2M...),划分磁盘时就用1AU，2AU等来划分，是ASM存储中结构最小的元素
+	    
+	ASM文件(ASM Files)
+	    存放在ASM磁盘组，一个ASM文件只能存放在一个磁盘组中，一个ASM文件->n个ASM区Extent；一个ASM区->n个AU
+	ASM区
+	    与数据库的区的概念不同，ASM会自动分配合适的区的大小，是最小的寻址单元
+	
+	ASM镜像和失败组(Mirroring and Failure Groups
+	    常规冗余(Normal Redundancy),2份相同的Extent，存放在两个不同的磁盘组中，只允许一个磁盘组损坏。
+	    高度冗余(High Redundancy),3份相同的Extent，存放在3个不同的磁盘组，允许2个磁盘组损坏。
+	    外部冗余(External Redundancy)，ASM不提供冗余保护，由第三方来完成。
+	    
+	在一个磁盘组中，ASM会尽量把每个区分布在不同的磁盘内，oracle会并行读取磁盘的数据，速度快。
+
+8. Oracle内存管理
+	Oracle内存存放的东西：
+	    1>执行的程序代码；
+	    2>会话连接
+	    3>程序执行期间所需的信息
+	    4>缓存的数据
+
+	Oracle内存结构（分3种）:
+			n个Server Processes(每个SP内含一个PGA)---共享<-->1个SGA<-->共享---n个Bacdground Processes(每个BP内含一个PGA)
+
+	    1>系统全局区(System Global Area,SGA)，也叫全局共享区(Shared Global Area,SGA)
+		SGA被所有的服务器进程(Server Processes)和的后台进程(Background Processes)所共享。
+		
+		SGA是共享的，存放数据和数据库实例的控制信息，多个用户可以连接到同一个实例，就可以共享SGA中的数据，
+		SGA和Oracle进程是Oracle Instance的组成部分，启动实例时，Oracle分配SGA，关闭实例时，将SGA释放，返回给操作系统。一个实例，一个SGA
+
+		SGA组成，所有连接到实例的用户可读SGA，但是只有几个进程可写SGA。主要由以下几个部分组成：
+		   1>数据库高速缓冲区Database Buffer Cache
+			存放数据文件中读取的数据块，所有连接到相同实例的用户可以共享这些数据。
+
+		   2>日志缓冲区Redo Log Buffer
+			循环使用的缓冲区，存入日志条目(Redo Entries)，日志条目是关于(Insert,Update....)对数据库的改变，Oracle后台进程LGWR把日志条目写到重做日志文件Online Redo Log Files，可用于数据库恢复。
+
+		   3>共享池Shared Pool
+			存放SQL语句，PL/SQL代码，数据字典，资源锁，其他控制信息。
+			包括：
+			   1>库缓冲(Library Cache)
+				存放解析过并执行过的SQL和PL/SQL代码。
+				当用户发送一条SQL或PL/SQL代码，Oracle先进行语法解析Parse，将解析结果(解析树Parse Tree、执行计划Execution Plan)保存在Library Cache，其他用户可以共享相同的Parse Tree与Execution Plan，这将加快SQL的执行速度。
+				包括：
+				   1>共享SQL区Shared SQL Areas
+					存放解析树Parse Tree 与 执行计划Execution Plan。
+					Oracle用于存放SQL语句的内存大小由SQL语句的复杂程度决定。
+
+				   2>私有SQL区Private SQL Areas
+					SQL语句的一部分存放在共享SQL区，另一部分存放在私有SQL区。
+					只被执行这条SQL语句会话Session所独有，其他Session不共享这部分信息，如：
+					SQL绑定的变量、环境和会话参数，运行PL/SQL程序单元所需的局部变量Local Variable,全局变量Global Variable,包变量Package Variable。
+					只在共享服务器模式Shared Server Mode存在。
+
+				   3>PL/SQL过程和包PL/SQL Procedures And Packages)
+				   4>控制结构（如：锁）
+
+			   2>字典缓冲(Dictionary Cache)，又叫行缓冲区(Row Cache)
+				是存放数据字典的内存区域，用户访问数据库时，Oracle会频繁地访问数据字典Dictionary，数据字典存放在磁盘上的System表空间中。
+				Oracle把频繁访问的数据字典信息(表、视图)缓存到数据字典缓冲区，对新输入的SQL语句进行解析。
+				字典缓冲区应该足够大以能容纳我们需要的数据字典信息，其大小影响数据库的整体性能。
+
+				数据字典信息存放在：
+				   1>数据字典缓冲区(Dictionary Cache)：
+					以行（Row）的形式存放数据（其他缓冲区以块（Block）的形式存放数据），因此数据字典缓冲区又叫行缓冲区（Row Cache）。
+				   2>库缓冲区(Library Cache)
+
+			   3>结果缓冲(Result Cache)
+				存放SQL的查询结果(SQL Query Result)与PL/SQL函数的执行结果(PL/SQL Function Result)
+
+			   4>并行执行消息(Parallel Execution Messages)用到的缓冲区
+			   5>控制结构占用的缓冲区
+
+		   4>Java池Java Pool
+			主要用于支持在数据库运行的Java代码。
+
+		   5>大池Large Pool
+			可选的内存结构，用于大范围的内存需求和分配。
+			以下几种情况会用到大池：
+			   1>数据库的备份和恢复(Backup、Restore)
+			   2>并行查询(Paralle Query)
+			   3>共享服务器模式下的会话内存(Session Memory)；
+
+		   6>流池Streams Pool
+			主要是加强对流(Oracle Streams)的支持。存放队列信息(Quere Messages)。大小动态改变。
+
+		固定SGA Fixed SGA: SGA中有一部分内存区用于存放数据库和实例的状态信息（不包括用户数据）
+
+	    2>程序全局区(Program Global Area,PGA)
+		每一个进程(SP,BP)都有一个PGA，因此PGA这部分内存对其他Server Processes 和 Background Processes来说是私有的Private、不被共享的。
+		用于处理SQL语句、容纳会话信息(Session)
+
+		组成：
+		   1>会话内存区(Session Memory)
+			存放会话变量及其他会话相关信息。在共享服务器模式(Shared Server Mode)下是共享不是私有。
+
+		   2>私有SQL区(Private SQL Area)
+			一条SQL语句-->一个私有SQL区，n个私有SQL区<->1个共享SQL区
+			如果是专有服务器模式Dedicated Server Mode,则私有SQL区全部在PGA中；
+			如果是共享服务器模式Shared Server Mode,则私有SQL区一部分在PGA，另一部分在SGA。
+
+			存放:
+			绑定变量Bind Variable的值、
+			查询执行的状态信息、
+			查询执行工作区Query Execution Work Areas
+			   1>涉及排序的操作Order by、Group by、Rollup、Window Function
+			   2>哈希连接Hash-Join
+			   3>位图合并Bitmap Merge
+			   4>位图创建Bitmap Create
+			游标Cursor的信息。
+			
+	    3>软件代码区(Software Code Area)
+		存放正在运行或者可能被运行的代码，Oracle数据库代码(Oracle Database Code)就存放在软件代码区。
+
+	Oracle内存管理方法
+	    早期DBA需要手工管理Oracle内存，调整SGA各项参数，11g开始Oracle引入 
+	    自动内存管理(Automatic Memory Management)
+	    DBA只需指定总共的内存大小MEMORY_TARGE，Oracle可以自动管理SGA和PGA。（初始化LOCK_SGA的值为TRUE，就不能自动管理）
+	    也可以自动SGA管理（Automatic Shared Memory Management）
+	    和自动PGA管理（Automatic PGA Memory Management）
+	    和内存相关的初始化参数：
+	    1>MEMORY_TARGET，Oracle使用的内存的大小，它是动态的，不能超过MEMORY_MAX_TARGET
+	    2>MEMORY_MAX_TARGET，数据库内存的最大值。
+	    3>SGA_TARGET，SGA的大小
+	    4>SGA_MAX_SIZE，控制数据库启动和运行时，SGA可以达到的最大值，不能被动态改变。
+	    5>PGA_AGGREGATE_TARGET，PGA的大小。
+
+	    启用AMM：
+	    show parameter target;
+	    select (value/1024/1024)||'M' from v$pgastat where name='maximum PGA allocated';			实例启动后分配给PGA的最大值。	    
+	    MEMORY_TARGET=SGA_TARGET+MAX(PGA_AGGREGRATE_TARGET,maximum pga allocated)				计算Memory_target的值，如果物理内存充足，可以设置得大一些，不能小于计算值：没启用AMM时，show parameter target的SGA_TARGET+MAX(PGA_AGGREGRATE_TARGET,maximum pga allocated)
+	    MEMORY_MAX_TARGET必须大于或者等于MEMORY_TARGET
+            show parameter memory_max_target;									Oracle11g新增此参数，10g无
+	    alter system MEMORY_MAX_TARGET=xxxM scope=spfile;
+	    alter system MEMORY_TARGET=xxxM scope=spfile;
+	    alter system SGA_TARGET=0 scope=spfile;
+	    alter system PGA_AGGREGATE_TARGET=0 scope=spfile;
+	    重启数据库
+	
+	    启用SGA自动管理(Automatic Shared Memory Management)
+	    show parameter statistics_level
+	    alter system set statistics_level=TYPICAL;								把数据库的统计级别设置为TYPICAL或ALL，TYPICAL表示收集主要统计信息,ALL还包括操作系统的统计信息
+	    计算SGA_TARGET的目标值
+	    select SGA_TARGET/1024/1024||'M'
+	    from(
+	    select( (select sum(value) from v$sga)-(select current_size from v$sga_dynamic_free_memory)
+	    ) "SGA_TARGET" from dual
+	    );
+	    设置SGA目标值,小于SGA_MAX_SIZE，大于计算值。
+	    alter system set SGA_TARGET=XXXM scope=both;
+	    SGA相关的内存组件大小设置成0
+	    alter system set shared_pool_size=0 scope=both;
+	    alter system set large_pool_size=0 scope=both;
+	    alter system set java_pool_size=0 scope=both;
+	    alter system set db_cache_size=0 scope=both;
+	    alter system set streams_pool_size=0 scope=both;
+	    重启数据库
+
+	    启用自动PGA管理(Automatic PGA Memory Management)
+	    把初始化参数PGA_AGGREGATE_TARGET设置成非0，就启用了PGA自动管理
+	    PGA_AGGREGATE_TARGET的值通常是SGA的20%
+	    alter system set PGA_AGGREGATE_TARGET=xxM scope=both;
+	    不能设置过大，否则提示无法修改
+	    alter system set WORKAREA_SIZE_POLICY=AUTO;
+	    重启数据库
+
+ 	    手动SGA，手动PGA
+	    手动SGA，要MEMORY_TARGET=0 SGA_TARGET=0 ,然后手动设置SGA各个内存组件的大小，JAVA_POOL_SIZE,SHARED_POOL_SIZE,LARGE_POOL_SIZE,DB_*_CACHE_SIZE(8个控制缓冲区的CACHE_SIZE)，LOG_BUFFER重做日志缓冲区,STREAMS_POOL_SIZE，RESULT_CHCHE_MAX_SIZE
+	    手动PGA，WORKAREA_SIZE_POLICY设置为MANUAL,建议设置自动PGA
+
+	    内存信息查询
+		show sga;
+		select * from v$sga;
+		   Fixed Size 是固定区域，用于存储SGA各组件的信息。大小是随平台和版本的而变化。
+		   Variable Size 是可变区域，包括共享池，JAVA池，大池。管理员可以改变其大小。
+		   Database Buffers 数据库高速缓冲区
+			实际大小
+			   select name,bytes/1024/1024||'M' from v$sgainfo where name='Buffer Cache Size';
+		   Redo Log Buffers 重做日志缓冲区
+			   select * from v$sgainfo;
+		
+		SGA各内存组件的信息可从视图v$sgainfo中查询,还可以从v$memory_dynamic_components查，不过要写很多。
+		查看shared pool,large pool,java pool 的剩余空间,从视图v$sgastat
+		select pool,name,bytes/1024/1024||'M' from v$sgastat where name='free memory' and pool='XXXX pool';
+
+9.进程
+	用户进程和Oracle进程（服务器进程SP（专有服务器进程Dedicated Server Process+共享服务器进程Shared Server Process）+后台进程BP）
+	
+	用户进程：
+	   当用户运行程序或连接到Oracle客户端(SQL*Plus)，就会创建用户进程。
+	   
+	   连接(Connection)
+		是用户进程到数据库实例之间的一条通信路径。若用户进程和实例在同一台机，使用IPC机制通信，否则使用网络进行通信。
+	   会话(Session)
+		是一个用户到数据库的一次特殊的连接。使用用户名和密码登陆数据库到退出oracle就完成了一次会话，一个用户一旦登录数据库就变成了会话，一个用户可以创建多个会话。
+		活动和非活动状态由是否在做SQL调用决定
+		活动状态(ACTIVE)
+		非活动状态(INACTIVE)
+
+	Oracle进程：
+	   运行在数据库服务器端。
+	   
+	   服务器进程Server Process
+		Oracle创建服务器进程，并处理连接到数据库的用户进程的请求。
+		除用户进程驻留在客户端外，其他所有的进程都在服务器端。
+		若应用程序和Oracle在同一台电脑，Oracle会把用户进程和服务器进程合并为一个进程，减少系统负载；若不在一台机，则用户进程通过网络和服务器进程进行通信。
+		工作：
+		   对SQL语句进行语法分析和执行；
+		   若数据不在SGA中，服务器进程负责把数据从磁盘文件中读取到SGA的高速缓冲区Database Buffers。
+		   把结果返回给应用程序；
+		分类：
+		   专有服务器进程Decdicated Server Process（只为特定的用户进程服务）
+		   共享服务器进程Shared Server Process
+
+	   后台进程Background Process
+		select * from v$bgprocess;从视图V$BGPROCESS查看后台进程信息。n代表1，2，3，4……，v$bgprocess 有描述字段。这个视图中的字段PADDR中所有非“00”的进程都是已经启动的进程。				
+		分类：可以从警报文件中查看Oracle启动实例时启动了哪些进程。
+		   归档进程 Archiver Process ARCn
+			当发生一次日志切换时(Log Switch)，归档进程把重做日志文件Online Redo Log Files复制到指定的存储设备上。在归档模式自动归档下才会启动此进程。
+			一个实例可以有10个归档进程ARC0~ARC9，DBA不能启动和关闭归档进程，但是可以alter system set LOG_ARCHIVE_MAX_PROCESSES来指定归档进程数量。
+			虽然可以指定归档进程数量，但是实际还是由Oracle根据归档工作负载量来决定启动多少的。
+			如果用spfile启动的数据库，可以动态修改LOG_ARCHIVE_MAX_PROCESSES;如果用pfile，就要重启数据库。
+
+		   校验点进程 Checkpoint Process CKPT
+			当一个校验点发生时，Oracle启动CKPT更新所有数据文件的头部来记录校验点的详细信息，更新数据文件的时候通过DBWn数据库书写进程来写数据块。
+
+		   数据库书写进程 Database Writer Process DBWn
+			负责把高速缓冲区的数据写到磁盘上的数据文件中。
+
+			高速缓冲区（Database Buffer Cache）中有缓冲器（Buffer）。
+			被修改的缓冲器被标记为“脏（Dirty），叫脏缓冲器（Dirty Buffer）
+			被修改的数据叫做脏数据（Dirty Data）
+			符合Oracle的最近最少使用（Least Recently Used，LRU）原则的Buffer被标识为“冷Cold”，叫做冷缓冲器（Cold Buffer）。
+			数据库书写进程把Dirty且Cold的缓冲器写入磁盘，使这些缓冲器变得干净Clean。
+			干净的缓冲器可以容纳从磁盘上读来的数据。
+			
+			Oracle运行时，用户不断把数据弄脏（Dirty）使得可用的干净的缓冲器Clean Buffer不断变少，当干净的缓冲器很少很少时，服务器进程想要把磁盘上的数据读取到内存时就找不到可用的缓冲器，这时数据库书写进程就把脏（Dirty）且冷（Cold）的缓冲器中的数据写入磁盘。
+			
+			触发：
+			   Oracle扫描缓冲区的一个临界值，当找不到可用的缓冲器时就会通知数据库书写进程。
+			   当发生检查点（Checkpoint）时，日志书写进程LGWR通知数据库书写进程把脏数据写入磁盘。
+
+			可以配置多个数据库书写进程同时写数据文件，DBW1~DBW9或DBWa~DBWj
+			由初始化参数DB_WRITE_PROCESSES来指定，是基于CPU的数量的。（例如，一个CPU，只有一个DBWn，指定多个也不会提高数据库性能）
+			修改时用spfile创建pfile文件，再修改pfi+++++++++++
+le文件的DB_WRITE_PROCESSES的值，shutdown immediate,用pfile重建spfile,startup来修改
+
+		   作业队列进程 Job Queue Process （CJQ0） 可选的后台进程，不会影响Oracle实例的启动。
+			用于批处理Batch Processing，负责作业Jobs的运行，用户设置的定时作业Jobs。
+			队列协调进程Coordinator Process  CJQ0从系统作业表JOB$中取到要被执行的作业，分裂一个子进程Slave Processes来执行选定的作业。
+
+			JOB_QUEUE_PROCESSES设置实例中作业队列的进程最大数量。默认1000，为0的话CJQ0不启动，作业队列功能被取消。修改方法同上。
+			包DBMS_JOB用于作业的管理。
+			
+		   日志书写进程 Log Write Process， LGWR
+			负责重做日志缓冲区（Redo Log Buffer）的管理，把重做日志缓冲区的内容写到磁盘上的重做日志文件中（Online Redo Log Files）。
+			重做日志缓冲区（Redo Log Buffer）是被循环利用，当用户对数据库进行修改时，服务器进程把与修改相关的信息以重做日志条目（Redo Entries）的形式复制到Redo Log Buffer。LGWR会以最快的速度把Redo Log Buffer的内容写到Online Redo Log Files中，以留出空间进行下一次循环操作。
+			触发：
+			   当用户提交一个事务
+				COMMIT时，LGWR立即把Redo Entries从Redo Log Buffer写到Online Redo Log Files中，但是被修改的数据并没有立即写到磁盘的数据文件中，而是延迟了，这种方式叫做“
+快速提交机制（Fast Commit Mechanism）”。
+				有时，重做日志缓冲区不足时，LGWR也会把未提交的事务的日志条目写到重做日志文件中，变成永久改变。
+				提交一个事务时，被赋予一个系统修改号（System Change Number，SCN），随事务的重做日志条目一起记录在重做日志文件中，这使得在RAC集群环境或分布式Distributed Databases环境下，恢复操作可以同步。
+			   每隔3秒钟
+			   日志缓冲区1/3被填满
+			   当数据库书写进程（DBWn）将修改的数据写入磁盘
+
+		   进程监控进程 Process Monitor Process PMON
+			“进程清道夫”，负责管理进程，当用户进程失败时，PMON负责清理该用户进程占用的高速缓冲区及其他资源。
+			会定期检查调试进程Dispatcher和服务器进程SP，并试图重启一些被停止的进程。
+			会把调度进程和实例的信息注册到监听器Listener。
+			可以被其他进程调用。
+
+		   队列监控进程 Queue Monitor Process QMNn （可选）
+			监控消息队列 Messsage Queues，一个实例，可以有10个
+		   恢复进程 Recover Process RECO
+			用于处理失败的分布式事务Distributed Transaction，自动连接到分布式的远程数据库处理。
+		   系统监控进程 System Monitor Process SMON
+			实例恢复
+			清除不再使用的临时段（Temporary Segment）
+			合并连续的区（Extents）
+			被其他进程调用
+		   其他后台进程 Other Background Process 
+		   	CMS,DIA0,DIAG,MNC........	
+
+	操作：
+	   select * from v$bgprocess where paddr!='00' order by name;			PADDR非00的为正在运行的Oracle后台进程		
+	   select * from v$session where type='USER';					查看数据库中有哪些会话。count(*)
+	   最热门的话题--提高数据库最大会话数:
+		最大会话数并不是由初始化参数SESSION决定的，而是由PROCESSES衍生出来，SESSION的默认值等于1.1*PROCESSES+5。
+	   	修改最大会话数的方法：
+		1.找到PFILE,SPFILE路径（Windows  %ORACLE_HOME%/databases,Linux ORACLE_HOME/dbs）
+		2.create pfile='....' from spfile='....';  （按指定名称规范命名好pfile)
+		3.修改pfile 中的processes的值 
+		4.shutdown immediate;
+		5.重建spfile  ,create spfile='...' from pfile='...';
+		6.startup(用spfile启动数据库)
+	   select sid,serial#,status,server,username from v$session where username='用户名'		查看此用户的会话状态。
+	   ALTER SYSTEM KILL SESSION 'sid号,serial#号'；						终止一个会话。回滚该会话的活动事务，并会返回错误信息ORA-00028:your session has been killed。若会话的某些操作（网络I/O）不能被立即终止，要直到操作执行完，这样的会话STATUS被标识为“KILLED”，SERVER变成“PSEUDO"。终止非活动会话也会被标识为“KILLED”，保留在v$session直到用户再次使用该会话。
+
+10.控制文件
+	概念:
+	    Control Files是一个很小的二进制文件，存放数据库物理结构的信息，一个控制文件对应一个数据库，由Oracle管理。
+	    数据库从初始化文件中找到控制文件的名字和位置，打开控制文件，找到数据文件和重做日志文件的信息，再打开数据库。控制文件会影响数据库启动。
+	    LGWR把当前日志序列号记录到控制文件中，CKPT把校验点的信息记录到控制文件中，ARCn把归档日志记录到控制文件中。要备份控制文件。
+	    初始化参数CONTROL_FILES记录控制文件的位置。DBA应该把控制文件镜像到不同物理盘防止数据库瘫痪。 
+	    
+	操作:
+	    select * from v$controlfile;					名字和位置
+	    show parameter control_file;					查看初始化参数
+	    镜像控制文件,移动控制文件和删除控制文件也是相同的方法
+		shutdown immediate ,以spfile建pfile,复制控制文件到新路径，并重命名(control09.ctl),把路径加到pfile的初始化参数control_files中，重建spfile,startup;
+	    得到控制文件的脚本
+		show parameter user_dump_dest;					跟踪文件的路径
+		alter database backup controlfile to trace;			最后查看跟踪文件
+
+11.Oracle重做日志文件
+----------------------***********************************Oracle 相关问题记录***********************---------------------------------------
+1. oracle 相关表、视图
+	V$DATAFILE				存放表空间的信息，可以知道有哪些数据文件,file#,name
+	dba_tablespaces				查询数据库中有哪些表空间,tablespace_name
+	dba_data_files				查看表空间由哪些数据文件组成 select file_name,Tablespace_name from dba_data_files[ where tablespace_name='表空间名']		
+	dba_temp_files				查看临时表空间信息tablespace_name,file_name,status...order by tablespace_name
+
+
+
+
+3.1 检查ORACLE实例的Library Cache命中率:
+
+标准:一般是大于99％
+
+检查方式:select 1-(sum(reloads)/sum(pins)) "Library cache Hit Ratio" from v$librarycache;
+
+处理措施:
+如果Library cache Hit Ratio的值低于99%，应调高shared_pool_size的大小。通过sqlplus连接数据库执行如下命令，调整shared_pool_size的大小：
+SQL>alter system flush shared_pool;
+SQL>alter system set shared_pool_size=设定值 scope=spfile;
+
+	3.2 检查ORACLE实例的Data Buffer（数据缓冲区）命中率:
+
+标准:一般是大于90%
+
+检查方式:
+select 1 - (phy.value / (cur.value + con.value)) "HIT RATIO"
+  from v$sysstat cur, v$sysstat con, v$sysstat phy
+ where cur.name = 'db block gets'
+  and con.name = 'consistent gets'
+  and phy.name = 'physical reads';
+
+处理措施:
+如果HIT RATIO的值低于90%，应调高db_cache_size的大小。通过sqlplus连接数据库执行如下命令，
+调整db_cache_size的大小
+SQL>alter system set db_cache_size=设定值 scope=spfile
+------------------------------********************************----------------------------
+1>
+select pool,sum(bytes)/1024/1024 || 'MB' from v$sgastat where pool is not null group by pool;
+可以查出实际 java pool,shared pool,large pool的值
+show parameter share; 查出的是受sga动态管理的值，实际值看不到

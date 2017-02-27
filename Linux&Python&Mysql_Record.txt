@@ -46,8 +46,36 @@ Categories=Application;Development;
 	xfs_growfs /dev/cl/root #给此分区进行调整生效
 	其他ext3,ext4等文件系统的调整要执行其他命令
 	
+
+6. VIM相关
+	退格键等.vimrc的设置
+	set nocompatible
+set backspace=indent,eol,start
+set ruler
+set showcmd
+set wildmenu
+set fo=cqrt
+set laststatus=2
+set textwidth=78
+set ww=<,>,h,l
+set autoindent
+" set no error bells
+set noeb visualbell
+set expandtab
+set tabstop=4
+set shiftwidth=4
+set expandtab
+let mapleader = ","
+syn on
+filetype on
+filetype plugin on
+filetype indent on
 ******************************** --/命令记录 /-- **************************************
 locale 语系
+临时修改语系 LANG="en_US.UFT-8"
+reboot后又回到原来的语系
+
+
 echo ${PATH} 显示环境变量
 env 显示环境变量及一些变量设定 其中PS1可以设定提示符[xymok@localhost 15:33 ~]$
 unlimit -a 程序限制
@@ -169,7 +197,7 @@ Ctrl + Z	『暫停』目前的命令
 	
 ******************************** --/Git相关问题记录 /-- **************************************
 1.创建ssh key
-	ssh-keygen -t rsa -C "261792225@qq.com" 就可以在~目录下找到.ssh文件夹，再复制里面的id_rsa.pub到github的ssh key 中
+	ssh-keygen -t rsa -C "261792225@qq.com" 就可以在~目录下找到.ssh文件夹，再复制里面的id_rsa.pub到github的ssh key 中,Windows也是这个命令参数
 2. 关联到远程repository
 	git remote add origin git@github.com:adiranxym/xymokcentos.git
 	删除这个关联
@@ -177,6 +205,26 @@ Ctrl + Z	『暫停』目前的命令
 	再次关联
 	git push -u origin master 初次提交
 	git push origin master	
+
+3. 在WINDOWS上搭建GIT局域网服务器
+	开放端口：10101(网址访问的端口)，29418（git.sshPort的端口，远程连接)
+	在服务器上解压Gitblit压缩文件
+	下载Gitblit的Go分支并解压到本地就可以了，不需要安装。由于Gitblit是用Java开发的，所以记得先安装Java运行时。
+	配置Gitblit目录下的\data\gitblit.properties文件，最基础的配置方式如下
+	本地代码库的位置
+	git.repositoriesFolder= D:/gitRep(服务器代码库的路径)
+	注意目录必须要用“/”而不是“\”。
+	配置访问的端口号，使用推荐值或默认值即可
+	server.httpPort = 10101
+	server.httpsPort=8443(一般用不到)
+
+	配置http和https访问的接口，默认值是localhost，如果想要从其它电脑访问，赋空值就可以。
+	server.httpBindInterface=服务器IP
+	server.httpsBindInterface=localhost
+
+        运行Gitblit目录下的gitblit.cmd就可以开启服务器了。在windows安装git软件就可以用了
+	和git ,github 一样用,URL地址直接复制ssh://.....git那一长串
+	初始用户名admin/admin 在data\users.conf里面，可以创建用户
 
 ******************************** --/Python问题 /-- **************************************
 
@@ -225,3 +273,41 @@ Ctrl + Z	『暫停』目前的命令
 		vim /etc/selinux/config 
 		SELINUX=enforcing  改SELINUX=disabled
 	要不就从 '/tmp'复制过来
+
+******************************** --/Oracle相关问题 /-- **************************************
+1. 安装Linux_11gR2_client客户端的时候，(在Centos7上用图形界面安装的时候出现界面不动的情况，安装不正常,而且安装过程老是报错)
+	报libXerx什么的错,这是因为在64位环境装32位软件
+	   需要安装 yum install libXext* -y 
+	   chown -R oracle:oinstall /usr/*
+	   yum install libXext.i686 -y
+	说什么颜色DISPLAY环境变量没有设
+	在root下执行xdpyinfo 找name of display:后的字符串
+	xhost +
+	su - oracle
+	export DISPLAY=上面那个字符串
+	xdpyinfo下输出东西就成功，可以安装了
+2. swap 交换空间要设大点，所以在安装linux的时候就要设大一点，先查一下，和物理内存有对应设置的建议。
+	如果安装的时候出现check少需要的package，就yum install XXX,有一个pdksh什么的，yum 找不到，就下载 rpm -ivh来安装
+
+3. 通过rpm安装oracle_instantclient
+	在oracle官网上下载
+	   oralce-instantclient12.1-basic-12......rpm
+	   oracle-instantclient12.1-devel-12......rpm
+	   oracle-instantclient12.1-sqlplus-12....rpm
+	rpm -ivh oracle-*安装这三个rpm
+	mkdir -p /usr/lib/oracle/12.1/client64/network/admin
+	--修改.bashrc文件,建立环境变量
+	echo '# Convoluted undocumented Oracle bullshit.' >> $HOME/.bashrc
+	echo 'export ORACLE_VERSION="12.1"' >> $HOME/.bashrc
+	echo 'export ORACLE_HOME="/usr/lib/oracle/$ORACLE_VERSION/client64"' >> $HOME/.bashrc
+	echo 'export PATH=$PATH:"$ORACLE_HOME/bin"' >> $HOME/.bashrc
+	echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:"$ORACLE_HOME/lib"' >> $HOME/.bashrc
+	echo 'export TNS_ADMIN="$ORACLE_HOME/network/admin"' >> $HOME/.bashrc
+	--解决sqlplus乱码
+	--echo 'export NLS_LANG="SIMPLIFIED CHINESE_CHINA.ZHS16GBK"' >> $HOME/.bashrc
+	echo 'export NLS_LANG="AMERICAN_AMERICA.UTF8"' >> $HOME/.bashrc 
+	更新环境变量
+	. ~/.bashrc
+	上传tnsnames.ora到/usr/lib/oracle/12.1/client64/network/admin
+	sqlplus /nolog
+	conn XXx/XXX@XXX 就可以连接了 	
